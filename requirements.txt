@@ -1,0 +1,50 @@
+# --- Web framework ---
+fastapi==0.141.1
+uvicorn[standard]>=0.52.4
+pydantic==2.13.5
+python-dotenv==1.2.3
+
+# --- Database (pgvector) ---
+sqlalchemy[asyncio]>=2.0.36
+psycopg[binary]>=3.2     # serves both the async and sync engine
+pgvector>=0.3.6
+alembic>=1.14
+
+# --- LangChain core + agent orchestration ---
+langchain==1.3.18
+langchain-core==1.6.1
+
+# --- LangGraph ---
+langgraph==1.2.11
+langgraph-checkpoint==4.2.0
+langgraph-prebuilt==1.1.0
+langgraph-sdk==0.4.4
+langsmith==0.11.2
+
+# --- LLM provider(s) ---
+langchain-openai==1.6.0
+langchain-anthropic==1.7.1
+langchain-text-splitters==1.1.2
+# langchain-ollama        # if you want local models too
+
+# --- HTTP client for calling external APIs/tools ---
+httpx==0.28.1
+
+# --- Optional but common for agents ---
+tiktoken            # token counting (OpenAI models)
+tenacity            # retry logic for flaky API calls
+
+# --- Github library
+pyGithub
+
+# --- Google API
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# --- PDF Reader
+pypdf==6.16.2
+python-multipart
+
+# --- Laya
+laya

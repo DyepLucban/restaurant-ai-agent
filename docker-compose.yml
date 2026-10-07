@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: restaurant-ai-agent-db
+    restart: always
+    environment:
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: restaurant_ai_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: restaurant-ai-agent-app
+    restart: always
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+volumes:
+  pgdata:
