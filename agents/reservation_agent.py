@@ -19,4 +19,7 @@ async def handle_reservation_agent(state: State):
 
     response = (await run_core(messages, tools, 0.4)).content
 
-    return {"messages": [AIMessage(content=response)]}
+    return {
+        "messages": [AIMessage(content=response, name="reservation_agent")],
+        "pending_agent": "reservation_agent" if response.strip().endswith("?") else None,
+    }

@@ -2,37 +2,61 @@ from langchain_core.tools import tool
 from repository.table_repository import browse, edit
 from database.connection import SessionAsync
 from sqlalchemy.exc import SQLAlchemyError
+from itertools import combinations
+
+def find_tables(capacity: int, free_tables: list):
+    singles = sorted(
+        (t for t in free_tables if t.capacity >= capacity),
+        key=lambda t: t.capacity,
+    )
+    if singles:
+        return "single", singles
+
+    for n in range(2, len(free_tables) + 1):
+        combos = [
+            c for c in combinations(free_tables, n)
+            if sum(t.capacity for t in c) >= capacity
+        ]
+        if combos:
+            best = min(combos, key=lambda c: sum(t.capacity for t in c) - capacity)
+            return "split", list(best)
+
+    return "none", []
 
 @tool
 async def search_available_tables(capacity: int | None = None) -> str:
     """
-    Check which restaurant's tables are currently available for booking.
+    Check which restaurant tables are currently available for booking.
 
     Use this when the user wants to reserve a table or asks about availability.
-    Optionally pass `capacity` (the party size) to return only tables that
-    can seat that many people. If omitted, all available tables are returned.
+    Pass `capacity` (the party size). The result starts with a type:
+    - single: tables that each seat the whole party
+    - split: no single table fits; the listed tables together seat the party
+    - none: not enough free tables
+    If `capacity` is omitted, all free tables are returned.
     """
     try:
         async with SessionAsync() as db:
             tables = await browse(db)
 
-        # If user doesn't specify party size
-        available_tables = [table for table in tables if not table.is_reserved]
+        free_tables = [t for t in tables if not t.is_reserved]
 
-        # If user specify party size
         if capacity:
-            available_tables = [table for table in tables if not table.is_reserved and table.capacity >= capacity]
+            result_type, chosen = find_tables(capacity, free_tables)
+        else:
+            result_type, chosen = ("single", free_tables) if free_tables else ("none", [])
 
-        # If no available table
-        if not available_tables:
-            return "No available tables at the moment."
+        if result_type == "none":
+            return "Type: none. Sorry, currently we don't have available tables for that party size."
 
-        response = "Available tables:\n"
-        for table in available_tables:
-            response += f"Table Number: {table.table_number}, Capacity: {table.capacity}\n"
+        lines = [f"Type: {result_type}"]
+        for t in chosen:
+            lines.append(f"Table Number: {t.table_number}, Capacity: {t.capacity}")
+        if result_type == "split":
+            lines.append(f"Combined capacity: {sum(t.capacity for t in chosen)}")
 
+        response = "\n".join(lines)
         print(f"RESERVATION MESSAGE: {response}")
-
         return response
     except SQLAlchemyError as e:
         return f"Error searching for available tables: {str(e)}"

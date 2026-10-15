@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 from services.embedding_service import embed_query
 from repository.chunk_repository import search
 from database.connection import SessionAsync
+import traceback
 
 @tool
 async def search_menu_docs(query: str) -> str:
@@ -19,10 +20,15 @@ async def search_menu_docs(query: str) -> str:
     embedded_query = await embed_query(query)
 
     async with SessionAsync() as db:
-        rows = await search(embedded_query, db)
+        try:
+            rows = await search(query=query, query_vector=embedded_query, db=db)
+        except Exception:
+            traceback.print_exc()
+            raise
 
     for r in rows:
-        print(f"{r['similarity']:.3f}  {r['content'][:60]}")
+        score = r.get("similarity") or r.get("bm25") or 0
+        print(f"{score:.3f}  {r['content'][:60]}")
 
     hits = [f"[{r['id']}] {r['content']}" for r in rows]
 
