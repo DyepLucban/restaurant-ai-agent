@@ -1,44 +1,79 @@
 from fastapi import Depends
 from schemas.seats_schema import SeatCreate, SeatUpdate
 from database.connection import get_db
-from sqlalchemy import select, or_
+from sqlalchemy import select, text, Integer, String, Text, Float
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import JSONB
 from database.models import chunks
 from uuid import uuid4
-import re
 
-def extract_section(content: str) -> str | None:
-    match = re.match(r"\[(.+?)\]", content)
-    return match.group(1) if match else None
-
-async def search(query_vector: list[float], db: AsyncSession = Depends(get_db)):
-    distance = chunks.Chunk.embedding.cosine_distance(query_vector)
-
-    cols = [
+def base_cols():
+    return [
         chunks.Chunk.id,
         chunks.Chunk.uuid,
         chunks.Chunk.content,
         chunks.Chunk.meta,
-        (1 - distance).label("similarity"),
     ]
 
-    top = (await db.execute(
-        select(*cols).order_by(distance).limit(5)
+# Semantic searching
+async def semantic_search(query_vector: list[float], db: AsyncSession = Depends(get_db)):
+    distance = chunks.Chunk.embedding.cosine_distance(query_vector)
+    rows = (await db.execute(
+        select(*base_cols(), (1 - distance).label("similarity"))
+        .order_by(distance)
+        .limit(20)
     )).mappings().all()
 
-    top = [r for r in top if r["similarity"] >= 0.5]
-    if not top:
+    return [r for r in rows if r["similarity"] >= 0.5]
+
+# Keyword searching
+async def keyword_search(db, query_text, limit=20):
+    KEYWORD_SQL = text("""
+        SELECT id, uuid, content, meta, pdb.score(id) AS bm25
+        FROM chunks
+        WHERE content ||| CAST(:q AS text)
+        ORDER BY bm25 DESC
+        LIMIT :limit
+    """).columns(id=Integer, uuid=String, content=Text, meta=JSONB, bm25=Float)
+
+    result = await db.execute(KEYWORD_SQL, {"q": query_text, "limit": limit})
+    return result.mappings().all()
+
+# Combine semantic and keyword searching (hybrid)
+def rrf_merge(*result_lists, k=60):
+    scores, items = {}, {}
+    for result in result_lists:
+        for rank, r in enumerate(result, start=1):
+            scores[r["id"]] = scores.get(r["id"], 0.0) + 1.0 / (k + rank)
+            items.setdefault(r["id"], r)
+    return [(items[i], scores[i]) for i in sorted(scores, key=scores.get, reverse=True)]
+
+async def search(query: str, query_vector: list[float], db: AsyncSession = Depends(get_db)):
+    sem = await semantic_search(query_vector, db)
+    kw = await keyword_search(db, query)
+    
+    fused = rrf_merge(sem, kw)[:5]
+    if not fused:
         return []
 
-    sections = {r["meta"]["section"] for r in top}
+    fused_scores = {r["id"]: s for r, s in fused}
+    sections = {
+        r["meta"].get("section")
+        for r, _ in fused
+        if r["meta"] and r["meta"].get("section")
+    }
 
+    if not sections:
+        return [r for r, _ in fused]
+
+    distance = chunks.Chunk.embedding.cosine_distance(query_vector)
     expanded = (await db.execute(
-        select(*cols)
+        select(*base_cols(), (1 - distance).label("similarity"))
         .where(chunks.Chunk.meta["section"].as_string().in_(sections))
         .order_by(distance)
     )).mappings().all()
 
-    return expanded
+    return sorted(expanded, key=lambda r: fused_scores.get(r["id"], 0), reverse=True)
 
 async def read():
     pass

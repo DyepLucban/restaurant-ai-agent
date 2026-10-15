@@ -23,14 +23,19 @@ def handle_orchestrator_agent(state: State) -> Command[Literal["faq_agent", "res
     router_llm = llm.with_structured_output(Route)
 
     route = router_llm.invoke([SystemMessage(content=ROUTER_PROMPT), *state["messages"][-6:]])
+    pending = state.get("pending_agent")
 
+    if pending and route.intent in ("chitchat, out_of_scope"):
+        return Command(goto=pending)
+    
     if route.intent == "reservation":
         return Command(goto="reservation_agent")
+    
     if route.intent == "faq":
-        return Command(goto="faq_agent")
+        return Command(goto="faq_agent", update={"pending_agent": None})
 
     replies = CHITCHAT_REPLIES if route.intent == "chitchat" else OUT_OF_SCOPE_REPLIES
     return Command(
         goto="__end__",
-        update={"messages": [AIMessage(content=random.choice(replies))]},
+        update={"messages": [AIMessage(content=random.choice(replies))], "pending_agent": None},
     )

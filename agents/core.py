@@ -10,13 +10,15 @@ TOOL_LOG: ContextVar[list | None] = ContextVar("tool_log", default=None)
 @traceable
 async def run_core(messages: str, tools: list = [], temperature: float = 0, max_iteration: int = 5):
     tool_map = {t.name: t for t in tools}
+    MAX_CALLS_PER_TURN = 3
+    MAX_TOTAL_CALLS = 4
 
     # Initialize LLM with the specified model and parameters
     llm = init_chat_model(
-        RUNNER_MODEL, # your model name, exactly as Docker lists it
-        model_provider="openai", # use the OpenAI-compatible client
+        RUNNER_MODEL,
+        model_provider="openai",
         base_url=RUNNER_MODEL_BASE_URL,
-        api_key="no-api-key", # required by the client, ignored by Docker
+        api_key="no-api-key",
         temperature=temperature,
         max_tokens=1024,
     )
@@ -24,41 +26,51 @@ async def run_core(messages: str, tools: list = [], temperature: float = 0, max_
     # Tool checking if tools are provided
     model = llm.bind_tools(tools) if tools else llm
 
+    total_calls = 0
+    seen = set()
+
     for _ in range(max_iteration):
         response = await model.ainvoke(messages)
 
-        # Check if tool is needed
+        # If not tool is being called
         if not response.tool_calls:
-            # Return the response if no tool calls are made
-            print(f"NO TOOL BEING CALLED")
             return response
-
-        if len(response.tool_calls) > 3:
-            return AIMessage(content="Sorry, I had trouble checking that. Could you rephrase?")
 
         messages.append(response)
 
-        for call in response.tool_calls:
-            tool = tool_map.get(call["name"])
-            print(f"TOOL CALLED: {tool}")
+        for i, call in enumerate(response.tool_calls):
+            key = (call["name"], str(call["args"]))
 
+            if i >= MAX_CALLS_PER_TURN or total_calls >= MAX_TOTAL_CALLS or key in seen:
+                messages.append(ToolMessage(
+                    content="Skipped. Answer using the results you already have.",
+                    tool_call_id=call["id"]
+                ))
+                continue
+
+            seen.add(key)
+            total_calls += 1
+
+            tool = tool_map.get(call["name"])
             log = TOOL_LOG.get()
+
             if log is not None:
                 log.append({"name": call["name"], "args": call["args"]})
 
-            # Check if tool does not exist
             if tool is None:
-                print(f"Error: Tool '{call['name']}' not found.")
-                output = f"Error: Tool '{call['name']}' not found."
+                output = f"Error: Tool '{call["name"]}' not found."
             else:
                 try:
                     output = await tool.ainvoke(call["args"])
                 except Exception as e:
-                    print(f"Error executing tool '{call['name']}': {e}")
-                    output = f"Error executing tool '{call['name']}': {e}"
-            messages.append(ToolMessage(content=str(output),tool_call_id=call["id"]))
+                    output = f"Error executing tool '{call["name"]}': {e}"
 
-    fallback = AIMessage(content="Sorry, I couldn't complete that request.")
-    messages.append(fallback)
+            messages.append(ToolMessage(
+                content=str(output),
+                tool_call_id=call["id"]
+            ))
 
-    return fallback
+        if total_calls >= MAX_TOTAL_CALLS:
+            return await llm.ainvoke(messages)
+
+    return await llm.ainvoke(messages)
