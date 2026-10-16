@@ -1,47 +1,138 @@
 # Restaurant AI Agent
 
-A restaurant customer-assistant service. It answers customer questions about the
-restaurant (menu, opening hours, policies, …) and handles table reservations,
-powered by a combination of FastAPI, LangGraph, LangChain, and a PostgreSQL
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120)
+[![FastAPI](https://img.shields.io/badge/fastapi-ff2b92.svg?logo=fastapi)](https://fastapi.tiangolo.dev/)
+[![LangChain](https://img.shields.io/badge/langchain-1.3-1f6f37.svg?logo=langchain)](https://python.langchain.com/)
+[![LangGraph](https://img.shields.io/badge/langgraph-1.2-e56930.svg?logo=langgraph)](https://langchain-ai.github.io/langgraph/)
+[![Docker](https://img.shields.io/badge/docker-2496ed.svg?logo=docker)](https://www.docker.com/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
+A restaurant customer-assistant service. It answers customer questions about
+the restaurant (menu, opening hours, policies, …) and handles table
+reservations, powered by FastAPI, LangGraph, LangChain, and a PostgreSQL
 database with pgvector.
 
-## Features
+## ✨ Features
 
-- **FAQ** – answers questions about the restaurant using a hybrid (semantic +
-  keyword) search over the ingested documents.
-- **Reservations** – checks which restaurant tables are available, and books
-  them for a given date.
-- **Conversation memory** – each request is tied to a session, so follow-up
-  messages keep the context of the conversation.
-- **Document ingestion** – PDFs can be uploaded; their content is split into
-  sections, embedded, and becomes searchable by the FAQ agent.
+- 🧠 **Tool-calling agent** – a lightweight agent loop that lets the LLM decide
+  when to call a tool, executes the requested calls, and feeds the results back
+  until it produces a final answer.
 
-## How it works
+- 📚 **RAG pipeline** – upload a PDF and its content is parsed, chunked,
+  embedded, and stored, so the FAQ agent can answer from your own documents.
 
-The application is a FastAPI service built around a LangGraph state graph.
+- 💬 **Two entry points** – a REST endpoint and a Telegram webhook hook, both
+  backed by the same agent.
 
-1. A message arrives through `POST /run-agent` (or through the Telegram webhook
-   hook, once implemented). The message and the session id are passed to the
-   graph runner.
-2. The graph starts at the **orchestrator agent**, which classifies the latest
-   message into one of four intents:
-   - `faq` – questions about the restaurant,
-   - `reservation` – checking availability or booking a table,
-   - `chitchat` / `out_of_scope` – everything else.
-   It then routes the conversation to the matching agent, or ends it with a
-   reply.
-3. The **FAQ agent** searches the knowledge base with the `search_menu_docs`
-   tool and answers using only the retrieved information.
-4. The **reservation agent** searches for available tables with
-   `search_available_tables` and books them with `book_table`.
-5. Both agents use the shared LangChain loop in `agents/core.py`, which executes
-   the requested tools and enforces call limits.
-6. When documents are ingested (`POST /ingest_document`), they are chunked,
-   embedded, and stored so that step 3 can answer questions about them.
+- 🗃️ **Versioned database** – tables are defined with SQLAlchemy and stored in
+  a `pgvector`-enabled PostgreSQL database.
 
-## Project structure
+- 🔌 **Easy to extend** – tools are plain async functions decorated with
+  `@tool`; adding one only requires registering it in the agent.
 
+## 🧰 Built-in tools
+
+| Tool | Used for |
+| --- | --- |
+| `search_menu_docs` | FAQ: hybrid (semantic + keyword) search over ingested documents |
+| `search_available_tables` | Reservations: check which restaurant tables are available |
+| `book_table` | Reservations: book a table for a given date |
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+    A["HTTP /run-agent\nor /ingest_document"] --> C["Controllers"]
+    C --> D["graph_controller\nruns the agent graph"]
+    D --> E["orchestrator_agent\nroutes the conversation"]
+    E --> F["faq_agent\nanswers from the knowledge base"]
+    E --> G["reservation_agent\nchecks and books tables"]
+    F --> H["run_core\ntool-calling loop"]
+    G --> H
+    H --> I["Runner LLM\n(OpenAI-compatible server)"]
+    H --> R["Embedding service\n(stores & searches vectors)"]
+    I --> H
 ```
+
+Both chat entry points converge on the same graph runner, which binds the
+available tools to the LLM and loops — invoking the model, dispatching any
+requested tool calls, and feeding the results back — until the model returns a
+final answer.
+
+Ingesting a document converts it into chunks with embeddings that are stored
+for retrieval, as described under [Testing](#testing).
+
+## 🚀 Getting started
+
+- **Environment** – Python 3.12 is used (see `Dockerfile`). A virtual environment
+  is already provisioned in `.venv/`.
+
+1. **Configure the environment** – copy `.env.example` to `.env` and fill in the
+   values (see [Configuration](#configuration)). `config/settings.py` loads `.env`
+   when the app starts.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Run the app** – either locally:
+
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8001
+   ```
+
+   or with Docker Compose, which also starts a `postgres` container:
+
+   ```bash
+   docker compose up
+   ```
+
+3. **Talk to it** – the API is now running. See [API](#api).
+
+## 🔗 API endpoints
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/health` | Health check. |
+| POST | `/webhook` | Telegram webhook hook. Not implemented yet. |
+| POST | `/run-agent` | Run the agent for a query and return the reply. |
+| POST | `/ingest_document` | Upload a PDF to make its content searchable. |
+
+`POST /run-agent` accepts a JSON body:
+
+```json
+{
+  "query": "Do you have a table for 4 on Friday?",
+  "session_id": "optional-session-id"
+}
+```
+
+The optional `session_id` selects the conversation memory; otherwise a new id is
+generated.
+
+## 🧪 Testing
+
+The evaluation script runs the agent end-to-end against the cases in
+`evals/cases.json` and verifies the replies and the tools that were called:
+
+```bash
+docker compose exec app python -m evals.run_evals
+```
+
+## 🧩 Adding a new tool
+
+1. Create `tools/<name>_tool.py`, write a function, and decorate it with `@tool`
+   from `langchain_core.tools`. Give it a clear docstring — that is the only
+   description the model sees.
+
+2. Add any required credentials to `config/settings.py` and `.env.example`.
+
+3. Import the tool and add it to the list passed into `run_core` in
+   `agents/core.py`.
+
+## 🗂️ Project structure
+
+```text
 .
 ├── main.py                        # FastAPI app and HTTP endpoints
 ├── requirements.txt              # Pinned dependencies for the app and services
@@ -74,58 +165,7 @@ The application is a FastAPI service built around a LangGraph state graph.
     └── document_chunking_service.py  # Split uploaded PDFs into searchable chunks
 ```
 
-## Getting started
-
-- **Environment** – Python 3.12 is used (see `Dockerfile`). A virtual environment
-  is already provisioned in `.venv/`.
-- **Dependencies** – install everything listed in `requirements.txt`:
-  ```
-  pip install -r requirements.txt
-  ```
-- **Configuration** – copy `.env.example` to `.env` and fill in the values
-  (see [Configuration](#configuration)). `config/settings.py` loads `.env` when
-  the app starts.
-
-## Running
-
-- **Local** – run the API from the project root:
-  ```
-  uvicorn main:app --host 0.0.0.0 --port 8001
-  ```
-- **Docker** – `docker compose up` starts both the app and a `postgres`
-  container; the app is then available on port 8001.
-
-## API
-
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| GET | `/health` | Health check. |
-| POST | `/webhook` | Telegram webhook hook. Not implemented yet. |
-| POST | `/run-agent` | Run the agent for a query and return the reply. |
-| POST | `/ingest_document` | Upload a PDF to make its content searchable. |
-
-`POST /run-agent` accepts a JSON body:
-
-```json
-{
-  "query": "Do you have a table for 4 on Friday?",
-  "session_id": "optional-session-id"
-}
-```
-
-The optional `session_id` selects the conversation memory; otherwise a new id is
-generated.
-
-## Testing
-
-The evaluation script runs the agent end-to-end against the cases in
-`evals/cases.json` and verifies the replies and the tools that were called:
-
-```
-docker compose exec app python -m evals.run_evals
-```
-
-## Configuration
+## ⚙️ Configuration
 
 All configuration is read from environment variables (see `.env.example`):
 
@@ -138,4 +178,4 @@ All configuration is read from environment variables (see `.env.example`):
 | `RUNNER_EMBEDDING_MODEL` | Model used for embeddings. |
 | `EMBEDDING_DIM` | Dimension of the embedding vectors. |
 | `LANGSMITH_TRACING` | Enables LangSmith tracing, if desired. |
-| `LANGSMITH_API_KEY` / `LANGSMITH_PROJECT` / `LANGSMITH_ENDPOINT` | LangSmith credentials and project. |
+| `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | LangSmith credentials and project. |
