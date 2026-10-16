@@ -64,7 +64,7 @@ def build_reservation_prompt():
         Today's date is {now:%Y-%m-%d} ({now:%A}).
 
         Rules:
-        - Call `search_available_tables` once per request, with `min_capacity` set to the party size.
+        - Call `search_available_tables` once per request, with `capacity` set to the party size.
         - The tool result has a "type":
         - "single": list the tables returned with their capacities.
         - "split": no single table fits, but the tables returned fit the party together. Offer exactly those tables and nothing else.
@@ -86,7 +86,7 @@ def build_reservation_prompt():
 
         Examples:
         Customer: Is there a table for 4?
-        You: [calls search_available_tables(min_capacity=4), type "single"] Table 5 and Table 8 both seat 4. Want one of them?
+        You: [calls search_available_tables(capacity=4), type "single"] Table 5 and Table 8 both seat 4. Want one of them?
 
         Customer: Table 5.
         You: Sure. What date?
@@ -95,7 +95,7 @@ def build_reservation_prompt():
         You: [calls book_table for Table 5 with tomorrow's date] Done, Table 5 is booked for tomorrow.
 
         Customer: Do you have a table for 6?
-        You: [calls search_available_tables(min_capacity=6), type "split" with Tables 1, 2, 3 seating 2 each] No single table fits, but Tables 1, 2 and 3 together seat 6. Want me to book all three?
+        You: [calls search_available_tables(capacity=6), type "split" with Tables 1, 2, 3 seating 2 each] No single table fits, but Tables 1, 2 and 3 together seat 6. Want me to book all three?
 
         Customer: Yes.
         You: What date?

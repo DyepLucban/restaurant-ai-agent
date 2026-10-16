@@ -25,7 +25,7 @@ def handle_orchestrator_agent(state: State) -> Command[Literal["faq_agent", "res
     route = router_llm.invoke([SystemMessage(content=ROUTER_PROMPT), *state["messages"][-6:]])
     pending = state.get("pending_agent")
 
-    if pending and route.intent in ("chitchat, out_of_scope"):
+    if pending and route.intent in ("chitchat", "out_of_scope"):
         return Command(goto=pending)
     
     if route.intent == "reservation":

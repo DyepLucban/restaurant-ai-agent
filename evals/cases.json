@@ -8,13 +8,15 @@
     "id": "followup_party_size",
     "turns": ["Do you have a table for two?", "How about for three?"],
     "expect_tool_calls": [
-      {"name": "search_for_available_tables", "args": {"min_capacity": 3}}
+      {"name": "search_available_tables", "args": {"capacity": 3}}
     ],
     "must_not_contain": ["split your party", "separate tables", "window", "outdoor"]
   },
   {
     "id": "fresh_session_followup",
     "query": "How about for three?",
-    "expect_no_tool_calls": true
+    "expect_tool_calls": [
+      {"name": "search_available_tables", "args": {"capacity": 3}}
+    ]
   }
 ]

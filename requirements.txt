@@ -45,6 +45,3 @@ google-api-python-client
 # --- PDF Reader
 pypdf==6.16.2
 python-multipart
-
-# --- Laya
-laya
