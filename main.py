@@ -1,16 +1,9 @@
-from fastapi import FastAPI, Request, Depends, UploadFile, File
+from fastapi import FastAPI, Request, UploadFile, File
 from routes.seat_routes import router as seats
 from schemas.base_schema import QueryBody
-from repository.table_repository import browse
 from uuid import uuid4
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from database.connection import get_db
-
 from controllers import graph_controller, ingest_controller
-from services.embedding_service import embed_query
-
-from repository.chunk_repository import search
 
 app = FastAPI()
 app.include_router(seats)

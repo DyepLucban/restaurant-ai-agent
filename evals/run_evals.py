@@ -3,7 +3,7 @@ import json
 from uuid import uuid4
 
 from agents.core import TOOL_LOG
-from agents.orchestrator_agent import run
+from controllers.graph_controller import run_graph
 
 
 def args_match(actual: dict, expected: dict) -> bool:
@@ -40,7 +40,8 @@ async def run_case(case: dict) -> tuple[str, list]:
     for turn in turns:
         calls = []                                 # keep only the last turn's calls
         TOOL_LOG.set(calls)
-        answer = await run(turn, session_id)
+        result = await run_graph(turn, session_id)
+        answer = result["message"]
     return answer, calls
 
 

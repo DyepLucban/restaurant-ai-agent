@@ -45,7 +45,7 @@ async def add(model: TableCreate):
     return table
 
 async def delete(table_id: int, db: AsyncSession = Depends(get_db)):
-    table = await read(id, db)
+    table = await read(table_id, db)
 
     if not table:
         return None
