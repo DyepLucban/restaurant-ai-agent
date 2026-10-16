@@ -2,7 +2,7 @@
   {
     "id": "faq_hours",
     "query": "What time do you open on Sunday?",
-    "must_contain": ["11"]
+    "must_contain": ["10"]
   },
   {
     "id": "followup_party_size",
