@@ -123,7 +123,7 @@ def backend_health():
 # request must not block the script. The worker below runs in a thread and only
 # returns data; all Streamlit state stays on the script thread.
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent")
-THINKING_HTML = '<div><span class="tspin"></span>Thinking…</div>'
+THINKING_HTML = '<div><span class="tspin"></span>Typing ...</div>'
 
 
 def _call_agent(prompt: str, session_id: str | None):

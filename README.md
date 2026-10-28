@@ -29,6 +29,8 @@ database with pgvector — plus a Streamlit demo UI with a live floor map.
   live table floor map that refreshes when the database changes, and the
   restaurant info PDF shown in the sidebar — see [Demo UI](#demo-ui).
 
+- 🎥 **Video demo** – watch it in action: [Restaurant AI Agent demo](https://drive.google.com/file/d/1bis2II3WX4msBl7X-nnHOjArT3XGafnG/view)
+
 - 🗃️ **Versioned database** – tables are defined with SQLAlchemy and stored in
   a `pgvector`-enabled PostgreSQL database.
 
