@@ -1,0 +1,10 @@
+# Keep the build context small and secrets out of images
+.venv/
+venv/
+.git/
+.gitignore
+.dockerignore
+.env
+__pycache__/
+**/__pycache__/
+*.pyc
