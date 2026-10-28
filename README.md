@@ -6,11 +6,12 @@
 [![LangGraph](https://img.shields.io/badge/langgraph-1.2-e56930.svg?logo=langgraph)](https://langchain-ai.github.io/langgraph/)
 [![Docker](https://img.shields.io/badge/docker-2496ed.svg?logo=docker)](https://www.docker.com/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Streamlit](https://img.shields.io/badge/streamlit-ff4b4b.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
 
 A restaurant customer-assistant service. It answers customer questions about
 the restaurant (menu, opening hours, policies, …) and handles table
 reservations, powered by FastAPI, LangGraph, LangChain, and a PostgreSQL
-database with pgvector.
+database with pgvector — plus a Streamlit demo UI with a live floor map.
 
 ## ✨ Features
 
@@ -23,6 +24,10 @@ database with pgvector.
 
 - 💬 **Two entry points** – a REST endpoint and a Telegram webhook hook, both
   backed by the same agent.
+
+- 🖥️ **Demo UI (Streamlit)** – a chat panel with in-box "Thinking…" bubbles, a
+  live table floor map that refreshes when the database changes, and the
+  restaurant info PDF shown in the sidebar — see [Demo UI](#demo-ui).
 
 - 🗃️ **Versioned database** – tables are defined with SQLAlchemy and stored in
   a `pgvector`-enabled PostgreSQL database.
@@ -43,6 +48,7 @@ database with pgvector.
 ```mermaid
 flowchart LR
     A["HTTP /run-agent\nor /ingest_document"] --> C["Controllers"]
+    S["Streamlit UI\n(frontend/app.py)"] -->|" Calls the\nAPI "| A
     C --> D["graph_controller\nruns the agent graph"]
     D --> E["orchestrator_agent\nroutes the conversation"]
     E --> F["faq_agent\nanswers from the knowledge base"]
@@ -57,7 +63,9 @@ flowchart LR
 Both chat entry points converge on the same graph runner, which binds the
 available tools to the LLM and loops — invoking the model, dispatching any
 requested tool calls, and feeding the results back — until the model returns a
-final answer.
+final answer. The Streamlit UI talks to the same REST layer: it sends chat
+messages to `/run-agent` and keeps its floor map in sync by polling
+`/tables/version` (and re-fetching `/tables/` only when the database changes).
 
 Ingesting a document converts it into chunks with embeddings that are stored
 for retrieval, as described under [Testing](#testing).
@@ -81,13 +89,41 @@ for retrieval, as described under [Testing](#testing).
    uvicorn main:app --host 0.0.0.0 --port 8001
    ```
 
-   or with Docker Compose, which also starts a `postgres` container:
+   or with Docker Compose, which starts the `postgres`, `app`, and `frontend`
+   containers in one command:
 
    ```bash
-   docker compose up
+   docker compose up          # API :8001, demo UI :8501
    ```
 
-3. **Talk to it** – the API is now running. See [API](#api).
+3. **Talk to it** – the API is now running. See [API](#api). For the demo
+   experience, open http://localhost:8501 and use the chat there — see
+   [Demo UI](#demo-ui).
+
+## 🖥️ Demo UI
+
+The Streamlit frontend (`frontend/app.py`) is a demo UI with three parts:
+
+- **Chat panel** – type a message; the agent's reply streams back with an
+  in-box "⏳ Thinking…" bubble while the LLM works. The conversation keeps the
+  same `session_id`, so the agent remembers earlier turns.
+- **Table floor map** – a live grid of the restaurant's tables (available /
+  reserved) that polls the database for changes every few seconds, so a booking
+  made in the chat (or anywhere) shows up on its own.
+- **Restaurant info document** – the sidebar lists every `*.pdf` in the
+  project root as the document behind the FAQ answers, with a download button
+  and an inline preview.
+
+Run it with `docker compose up` (recommended — see above), or locally:
+
+```bash
+pip install -r frontend/requirements.txt
+.venv/bin/streamlit run frontend/app.py
+```
+
+The UI is configured with environment variables — see the frontend section of
+[Configuration](#configuration).
+
 
 ## 🔗 API endpoints
 
@@ -97,6 +133,8 @@ for retrieval, as described under [Testing](#testing).
 | POST | `/webhook` | Telegram webhook hook. Not implemented yet. |
 | POST | `/run-agent` | Run the agent for a query and return the reply. |
 | POST | `/ingest_document` | Upload a PDF to make its content searchable. |
+| GET | `/tables/` | List all restaurant tables (number, capacity, reservation state). |
+| GET | `/tables/version` | Cheap change fingerprint (`count`, last write time) for polling clients. |
 
 `POST /run-agent` accepts a JSON body:
 
@@ -137,9 +175,14 @@ docker compose exec app python -m evals.run_evals
 ├── main.py                        # FastAPI app and HTTP endpoints
 ├── requirements.txt              # Pinned dependencies for the app and services
 ├── Dockerfile                   # App image (python:3.12-slim); runs `uvicorn main:app`
-├── docker-compose.yml           # `app` + `postgres` services
+├── docker-compose.yml           # `app` + `postgres` + `frontend` services
 ├── .env.example                 # Template for the required environment variables
+├── .dockerignore                # Keeps .venv/.git/.env out of the images
 ├── .gitignore
+├── frontend/                     # Streamlit demo UI
+│   ├── app.py                  # Chat + live table floor map + restaurant PDF panel
+│   ├── Dockerfile              # UI image; `streamlit run frontend/app.py`
+│   └── requirements.txt        # Frontend-only dependencies (streamlit, requests)
 ├── agents/                     # LangGraph agent nodes
 │   ├── core.py                # Shared LangChain agent loop (run_core)
 │   ├── orchestrator_agent.py # Intent router for the conversation
@@ -150,10 +193,14 @@ docker compose exec app python -m evals.run_evals
 │   └── prompts.py          # All LLM prompts
 ├── controllers/               # HTTP-facing logic
 │   ├── graph_controller.py   # Builds/caches the agent graph; runs it
+│   ├── table_controller.py   # Tables read endpoints (list + change fingerprint)
 │   └── ingest_controller.py  # PDF upload -> chunk -> embed -> store
 ├── database/                  # Async SQLAlchemy setup and ORM
 │   ├── connection.py        # Async engine/session
 │   └── models/              # Restaurant tables and ingested chunks
+├── routes/                    # FastAPI routers
+│   ├── seat_routes.py         # Seats endpoints
+│   └── table_routes.py        # Tables endpoints (list + change fingerprint)
 ├── evals/                     # Evaluation cases and runner
 │   ├── run_evals.py
 │   └── cases.json
@@ -179,3 +226,12 @@ All configuration is read from environment variables (see `.env.example`):
 | `EMBEDDING_DIM` | Dimension of the embedding vectors. |
 | `LANGSMITH_TRACING` | Enables LangSmith tracing, if desired. |
 | `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | LangSmith credentials and project. |
+
+**Frontend (Streamlit UI only):**
+
+| Variable | Purpose |
+| -------- | ------- |
+| `BACKEND_URL` | Base URL of the API (compose default: `http://app:8001`). |
+| `TABLE_POLL_SECONDS` | How often the floor map checks the DB for changes (default `5`; `0` = manual refresh only). |
+| `PDF_ROOT` | Where the UI discovers restaurant-info PDFs (defaults to the project root). |
+| `CHAT_HEIGHT`, `MAP_HEIGHT` | Panel heights in px (default `520`); longer content scrolls inside the panel. |

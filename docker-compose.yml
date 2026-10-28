@@ -30,6 +30,24 @@ services:
       - postgres
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: restaurant-ai-agent-ui
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      BACKEND_URL: http://app:8001
+      # seconds between DB-change checks for the floor map (0 = manual refresh only)
+      TABLE_POLL_SECONDS: ${TABLE_POLL_SECONDS:-5}
+      # panel heights in px; longer content scrolls inside the panel
+      CHAT_HEIGHT: ${CHAT_HEIGHT:-520}
+      MAP_HEIGHT: ${MAP_HEIGHT:-520}
+    depends_on:
+      - app
+
 models:
   llm:
     model: ai/ornith-1.5:9b-q5_K_M

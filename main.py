@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, UploadFile, File
 from routes.seat_routes import router as seats
+from routes.table_routes import router as tables
 from schemas.base_schema import QueryBody
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ from controllers import graph_controller, ingest_controller
 
 app = FastAPI()
 app.include_router(seats)
+app.include_router(tables)
 
 @app.get("/health")
 def check_health():

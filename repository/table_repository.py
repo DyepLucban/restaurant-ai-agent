@@ -1,7 +1,7 @@
 from fastapi import Depends
 from schemas.tables_schema import TableUpdate, TableCreate
 from database.connection import get_db
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import tables
 
@@ -43,6 +43,18 @@ async def add(model: TableCreate):
     )
 
     return table
+
+# Cheap change fingerprint for polling clients (count + last write time)
+async def version(db: AsyncSession = Depends(get_db)):
+    record = await db.execute(
+        select(func.count(tables.Table.id), func.max(tables.Table.updated_at))
+    )
+    count, last_updated = record.first()
+
+    return {
+        "count": count,
+        "last_updated": last_updated.isoformat() if last_updated else None
+    }
 
 async def delete(table_id: int, db: AsyncSession = Depends(get_db)):
     table = await read(table_id, db)

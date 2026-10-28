@@ -3,7 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class TableBase(BaseModel):
     id: int
     user_id: int
-    table_number: str
+    table_number: int
     capacity: int
     is_reserved: bool
     reserved_date: str
@@ -13,7 +13,7 @@ class TableResponse(TableBase):
 
     id: int
     user_id: int
-    table_number: str
+    table_number: int
     capacity: int
     is_reserved: bool
     reserved_date: str
