@@ -51,7 +51,7 @@ services:
 models:
   llm:
     model: ai/ornith-1.5:9b-q5_K_M
-    context_size: 16384
+    context_size: 131000
 
 volumes:
   paradedb_data:
