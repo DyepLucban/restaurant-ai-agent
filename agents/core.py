@@ -21,6 +21,8 @@ async def run_core(messages: str, tools: list = [], temperature: float = 0, max_
         api_key="no-api-key",
         temperature=temperature,
         max_tokens=1024,
+        timeout=60,
+        max_retries=1,
     )
 
     # Tool checking if tools are provided
